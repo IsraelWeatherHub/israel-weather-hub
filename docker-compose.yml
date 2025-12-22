@@ -1,0 +1,80 @@
+services:
+  client:
+    build:
+      context: ../israel-weather-hub-client
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_MAPS_API_URL=http://localhost:3000/api/v1
+    depends_on:
+      - maps-api
+
+  maps-api:
+    build:
+      context: ../maps-api
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_PUBLIC_ENDPOINT=http://localhost:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=weather-maps
+      - MINIO_REGION=us-east-1
+    depends_on:
+      - minio
+      - redis
+
+  grib-ingestor:
+    build:
+      context: ../grib-ingestor
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_HOST=redis
+      - DOWNLOAD_DIR=/data/gribs
+    volumes:
+      - grib_data:/data/gribs
+    depends_on:
+      - redis
+
+  map-renderer:
+    build:
+      context: ../map-renderer
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_HOST=redis
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=weather-maps
+    volumes:
+      - grib_data:/data/gribs
+    depends_on:
+      - redis
+      - minio
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  minio_data:
+  redis_data:
+  grib_data:
