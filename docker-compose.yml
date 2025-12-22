@@ -9,6 +9,7 @@ services:
       - NEXT_PUBLIC_MAPS_API_URL=http://localhost:3000/api/v1
     depends_on:
       - maps-api
+    restart: always
 
   maps-api:
     build:
@@ -23,28 +24,36 @@ services:
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_BUCKET=weather-maps
       - MINIO_REGION=us-east-1
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/weather
     depends_on:
-      - minio
-      - redis
+      minio:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: always
 
   grib-ingestor:
     build:
       context: ../grib-ingestor
       dockerfile: Dockerfile
     environment:
-      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
       - DOWNLOAD_DIR=/data/gribs
     volumes:
       - grib_data:/data/gribs
     depends_on:
-      - redis
+      - rabbitmq
+    restart: always
 
   map-renderer:
     build:
       context: ../map-renderer
       dockerfile: Dockerfile
     environment:
-      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
@@ -52,8 +61,9 @@ services:
     volumes:
       - grib_data:/data/gribs
     depends_on:
-      - redis
+      - rabbitmq
       - minio
+    restart: always
 
   minio:
     image: minio/minio
@@ -66,15 +76,41 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    restart: always
 
-  redis:
-    image: redis:alpine
+  rabbitmq:
+    image: rabbitmq:3-management
     ports:
-      - "6379:6379"
+      - "5672:5672"
+      - "15672:15672"
     volumes:
-      - redis_data:/data
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: weather
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   minio_data:
-  redis_data:
   grib_data:
+  rabbitmq_data:
+  postgres_data:
