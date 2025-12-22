@@ -1,4 +1,4 @@
-# Infrastructure
+# israel-weather-hub
 
 This folder contains the Docker Compose configuration for the Israel Weather Hub project.
 
