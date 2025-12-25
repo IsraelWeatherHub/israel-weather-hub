@@ -35,9 +35,9 @@ services:
         condition: service_healthy
     restart: always
 
-  grib-ingestor:
+  gfs-ingestor:
     build:
-      context: ../grib-ingestor
+      context: ../gfs-ingestor
       dockerfile: Dockerfile
     environment:
       - RABBITMQ_HOST=rabbitmq
@@ -48,7 +48,20 @@ services:
       - rabbitmq
     restart: always
 
-  map-renderer:
+  ecmwf-ingestor:
+    build:
+      context: ../ecmwf-ingestor
+      dockerfile: Dockerfile
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - DOWNLOAD_DIR=/data/gribs
+    volumes:
+      - grib_data:/data/gribs
+    depends_on:
+      - rabbitmq
+    restart: always
+
+  map-renderer-gfs:
     build:
       context: ../map-renderer
       dockerfile: Dockerfile
@@ -58,6 +71,25 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_BUCKET=weather-maps
+      - LISTEN_MODEL=gfs
+    volumes:
+      - grib_data:/data/gribs
+    depends_on:
+      - rabbitmq
+      - minio
+    restart: always
+
+  map-renderer-ecmwf:
+    build:
+      context: ../map-renderer
+      dockerfile: Dockerfile
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=weather-maps
+      - LISTEN_MODEL=ecmwf
     volumes:
       - grib_data:/data/gribs
     depends_on:
